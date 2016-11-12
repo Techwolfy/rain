@@ -1,8 +1,4 @@
 <?php
-	if($_REQUEST["key"] != "bqcauiehofuioasnfi") {
-		die();
-	}
-
 	function api($endpoint, $query) {
 		//API access details
 		$apikey = "PUT_NOAA_API_KEY_HERE";
@@ -15,14 +11,13 @@
 		curl_setopt($apiCURL, CURLOPT_RETURNTRANSFER, true);
 
 		//Send API request
-global $apiResult;
 		$apiResult = curl_exec($apiCURL);
 		curl_close($apiCURL);
 
 		return json_decode($apiResult);
 	}
 
-	function getLatLon($zip) {
+	/*function getLatLon($zip) {
 		$ndfdURL = "http://graphical.weather.gov/xml/sample_products/browser_interface/ndfdXMLclient.php";
 		$ndfdParams = array("listZipCodeList" => $zip);
 
@@ -38,7 +33,7 @@ global $apiResult;
 		$xml = simplexml_load_string($ndfdResult);
 
 		return explode(",", $xml->latLonList);
-	}
+	}*/
 
 	function getForecast($lat, $lon) {
 		$fcURL = "http://forecast.weather.gov/MapClick.php";
@@ -62,144 +57,210 @@ global $apiResult;
 		return json_decode($fcResult);
 	}
 
-	//Get user's latitude and longitude
-	//$latlon = getLatLon($zip);
-	$latlon = array("latitude" => $_POST["latitude"], "longitude" => $_POST["longitude"]);
-	$latlonMargin = 0.1;
+	if(isset($_REQUEST["forecast"])) {
+		//Get user's latitude and longitude
+		//$latlon = getLatLon($zip);
+		$latlon = array("latitude" => $_REQUEST["latitude"], "longitude" => $_REQUEST["longitude"]);
+		$latlonMargin = 0.1;
 
-	//Get current forecast station
-	$forecast = getForecast($latlon["latitude"], $latlon["longitude"]);
+		//Get current forecast station
+		$forecast = getForecast($latlon["latitude"], $latlon["longitude"]);
 
-	//Get station IDs
-	$stationQuery = array(
-		"datasetid" => "GHCND",
-		"datacategoryid" => "PRCP",
-		"extent" =>
-			($latlon["latitude"]-$latlonMargin).",".
-			($latlon["longitude"]-$latlonMargin).",".
-			($latlon["latitude"]+$latlonMargin).",".
-			($latlon["longitude"]+$latlonMargin),
-		"startdate" => "2015-11-07",
-		"enddate" => "2015-11-07"
-	);
-	$stations = api("stations", http_build_query($stationQuery));
-	$stationList = "";
-	foreach($stations->results as $record) {
-		$stationList .= "&stationid=".$record->id;
-	}
-
-	//Get rainfall data for last 4 years
-	$numYears = 4;
-	$result = array();
-	for($i = 1; $i <= $numYears; $i++) {
-		$rainQuery = array(
+		//Get station IDs
+		$stationQuery = array(
 			"datasetid" => "GHCND",
-			"datatypeid" => "PRCP",
-			"startdate" => date("Y-m-d", mktime(0, 0, 0, date("m")  , date("d"), date("Y")-$i)),
-			"enddate" => date("Y-m-d", mktime(0, 0, 0, date("m")  , date("d"), date("Y")-$i)),
-			"limit" => 10,
-			"includemetadata" => true
+			"datacategoryid" => "PRCP",
+			"extent" =>
+				($latlon["latitude"]-$latlonMargin).",".
+				($latlon["longitude"]-$latlonMargin).",".
+				($latlon["latitude"]+$latlonMargin).",".
+				($latlon["longitude"]+$latlonMargin),
+			"startdate" => "2015-11-07",
+			"enddate" => "2015-11-07"
 		);
-		$result[$i-1] = api("data", http_build_query($rainQuery).$stationList);
-	}
+		$stations = api("stations", http_build_query($stationQuery));
+		$stationList = "";
+		foreach($stations->results as $record) {
+			$stationList .= "&stationid=".$record->id;
+		}
 
-	//Calculate probability
-	$numYearsWithRain = 0;
-	$numResults = array();
-	$numStationsWithRain = array();
-	$yearNum = 0;
-	foreach($result as $year) {
-		$numResults[$yearNum] = 0;
-		$numStationsWithRain[$yearNum] = 0;
-		foreach($year->results as $data) {
-			$numResults[$yearNum]++;
-			if($data->value > 0 && $data->value != 99999) {
-				$numStationsWithRain[$yearNum]++;
+		//Get rainfall data for last 4 years
+		$numYears = 4;
+		$result = array();
+		for($i = 1; $i <= $numYears; $i++) {
+			$rainQuery = array(
+				"datasetid" => "GHCND",
+				"datatypeid" => "PRCP",
+				"startdate" => date("Y-m-d", mktime(0, 0, 0, date("m")  , date("d"), date("Y")-$i)),
+				"enddate" => date("Y-m-d", mktime(0, 0, 0, date("m")  , date("d"), date("Y")-$i))
+			);
+			$result[$i-1] = api("data", http_build_query($rainQuery).$stationList);
+		}
+
+		//Calculate probability
+		$numYearsWithRain = 0;
+		$numResults = array();
+		$numStationsWithRain = array();
+		$yearNum = 0;
+		foreach($result as $year) {
+			$numResults[$yearNum] = 0;
+			$numStationsWithRain[$yearNum] = 0;
+			foreach($year->results as $data) {
+				$numResults[$yearNum]++;
+				if($data->value > 0 && $data->value != 99999) {
+					$numStationsWithRain[$yearNum]++;
+				}
+			}
+			if($numResults[$yearNum] > 0) {
+				if($numStationsWithRain[$yearNum] > 0) {
+					$numYearsWithRain++;
+				}
+				$yearNum++;
 			}
 		}
-		if($numResults[$yearNum] > 0) {
-			if($numStationsWithRain[$yearNum] > 0) {
-				$numYearsWithRain++;
-			}
-			$yearNum++;
-		}
-	}
 
-	//Predict whether it will rain or not
-	//TODO: Check forecast
-	$chanceOfRain = ($numYearsWithRain / $numYears) * 100;
+		//Predict whether it will rain or not
+		//TODO: Check forecast for rain
+		$chanceOfRain = ($numYearsWithRain / $numYears) * 100;
+		//TODO: Display chance of rain and forecast
+		//TODO: Extend to month view? Allow user to change date / location?
+
+		$response = array(
+			"chanceOfRain" => $chanceOfRain,
+			"forecast" => $forecast,
+			"numYears" => $numYears,
+			"numYearsWithRain" => $numYearsWithRain,
+			"numResults" => $numResults,
+			"numStationsWithRain" => $numStationsWithRain
+		);
+
+		header("Content-Type: application/json");
+		echo json_encode($response);
+		die();
+	}
 ?>
 
 <html>
 
 <head>
 	<title>Rain Predictor</title>
-		<style>
-			@import url(http://fonts.googleapis.com/css?family=Roboto);
+	<link rel="stylesheet" href="bootstrap.css">
+	<script>
+		var latitude = null;
+		var longitude = null;
+		var forecast = null;
+		var locationDiv = null;
+		var locationButton = null;
+		var submitButton = null;
 
-			body {
-				background-color: #222222;
-				color: #DDDDDD;
-				margin: 10px;
-				font-family: "Roboto", "Arial", sans-serif;
+		window.onload = function() {
+			locationDiv = document.getElementById("location");
+			locationButton = document.getElementById("locationButton");
+			submitButton = document.getElementById("submitButton");
+		}
+
+		function getLocation() {
+			if(navigator.geolocation) {
+				locationButton.value = "Loading...";
+				locationButton.disabled = "disabled";
+				submitButton.disabled = "disabled";
+				navigator.geolocation.getCurrentPosition(showPosition, showLocationError);
+			} else {
+				locationDiv.innerHTML = "Geolocation is not supported by this browser.<br>\nPlease use a newer browser.<br>";
 			}
+		}
 
-			table, th, td {
-				border: 2px solid #DDDDDD;
-				border-collapse: collapse;
-				padding: 10px;
+		function showLocationError(error) {
+			switch(error.code) {
+				case error.PERMISSION_DENIED:
+					locationDiv.innerHTML = "User denied the request for location data.<br>";
+					break;
+				case error.POSITION_UNAVAILABLE:
+					locationDiv.innerHTML = "Location information is unavailable.<br>";
+					break;
+				case error.TIMEOUT:
+					locationDiv.innerHTML = "The request for location data timed out.<br>";
+					break;
+				default:
+					locationDiv.innerHTML = "An unknown error occurred.<br>";
+					break;
 			}
+			locationDiv.innerHTML += "Please reload the page and try again.<br>";
+		}
 
-		</style>
-		<script>
-			function getLocation() {
-				if(navigator.geolocation) {
-					navigator.geolocation.getCurrentPosition(showPosition);
-				} else {
-					document.getElementById("location").innerHTML = "Geolocation is not supported by this browser.<br>Please use a newer browser.<br>";
-					document.getElementById("submit").disabled = "disabled";
+		function showPosition(position) {
+			latitude = Math.round(position.coords.latitude * 100000) / 100000;
+			longitude = Math.round(position.coords.longitude * 100000) / 100000;
+			locationDiv.innerHTML = "<h4>Latitude: <span class=\"text-primary\">" + latitude + "</span></h4>\n" + "<h4>Longitude: <span class=\"text-primary\">" + longitude + "</span></h4>";
+
+			locationButton.value = "Get Location";
+			locationButton.disabled = "";
+			submitButton.disabled = "";
+		}
+
+		function submit() {
+			submitButton.value = "Loading...";
+			submitButton.disabled = "disabled";
+
+			var url = "?forecast&latitude=" + latitude + "&longitude=" + longitude;
+			var xhr = new XMLHttpRequest();
+			xhr.onreadystatechange = function() {
+				if(xhr.readyState == XMLHttpRequest.DONE && xhr.status == 200) {
+					forecast = JSON.parse(xhr.responseText);
+					document.getElementById("chanceOfRain").innerHTML = forecast.chanceOfRain;
+					document.getElementById("numYears").innerHTML = forecast.numYears;
+					document.getElementById("numYearsWithRain").innerHTML = forecast.numYearsWithRain;
+					document.getElementById("percentYearsWithRain").innerHTML = (forecast.numYearsWithRain / forecast.numYears) * 100;
+					document.getElementById("numResults").innerHTML = forecast.numResults;
+					document.getElementById("numStationsWithRain").innerHTML = forecast.numStationsWithRain;
+					document.getElementById("forecast").innerHTML = JSON.stringify(forecast.forecast, null, 4);
+
+					submitButton.value = "Submit";
+					submitButton.disabled = "";
 				}
 			}
-
-			function showPosition(position) {
-				var latitude = Math.round(position.coords.latitude * 100000) / 100000;
-				var longitude = Math.round(position.coords.longitude * 100000) / 100000;
-				document.getElementById("location").innerHTML = "Latitude: " + latitude + "<br>Longitude: " + longitude + "<br>";
-				document.getElementById("latitude").value = latitude;
-				document.getElementById("longitude").value = longitude;
-			}
-		</script>
+			xhr.open("GET", url, true);
+			xhr.send(null);
+		}
+	</script>
 </head>
 
 <body>
 
-	<form id="locationForm" action="" method="post">
-		<input id="latitude" name="latitude" type="hidden" value="<?php echo $_POST["latitude"]; ?>">
-		<input id="longitude" name="longitude" type="hidden" value="<?php echo $_POST["longitude"]; ?>">
-		<div id="location">Latitude: <?php echo $_POST["latitude"]; ?><br>Longitude: <?php echo $_POST["longitude"]; ?><br></div>
-		<input type="button" onclick="getLocation();" value="Get Location">
-		<input id="submit" type="submit" value="Submit">
-	</form>
-	<p>
-
-	Results:<br>
-	<?php echo $chanceOfRain; ?>% change of rain!<br>
-	<hr>
-	Number of years checked: <?php echo $numYears; ?><br>
-	Number of years with rain: <?php echo $numYearsWithRain; ?><br>
-	Percentage of years with rain: <?php echo ($numYearsWithRain / $numYears) * 100; ?><br>
-	<hr>
-	Number of stations checked (by year): <?php print_r($numResults); ?><br>
-	Number of stations with rain (by year): <?php print_r($numStationsWithRain); ?><br>
-	<hr>
-	<!--<pre><?php print_r($result); ?></pre>-->
-	<hr>
-	<!--<pre><?php echo $stationList; ?></pre>-->
-	<hr>
-	<!--<pre><?php print_r($latlon); ?></pre>-->
-	<hr>
-	<!--<pre><?php print_r($forecast); ?></pre>-->
-	<hr>
+	 <div class="jumbotron text-center">
+		<h1>Rain Predictor</h1>
+		<div id="location" class="panel panel-info" style="display: inline-block; padding: 10px">
+			<h4>Latitude: <span class="text-primary">--</span></h4>
+			<h4>Longitude: <span class="text-primary">--</span></h4>
+		</div>
+		<p />
+		<input id="locationButton" type="button" class="btn btn-primary" onclick="getLocation();" value="Get Location">
+		<input id="submitButton" type="button"  class="btn btn-success" onclick="submit();" value="Submit" disabled="disabled">
+	</div>
+	<div class="container">
+		<div class="row">
+			<div class="col-sm-4">
+				<h3>Results</h3>
+				<p><span id="chanceOfRain">--</span>% change of rain!</p>
+			</div>
+			<div class="col-sm-4">
+				<h3>Stats</h3>
+				<p>Number of years checked: <span id="numYears">--</span></p>
+				<p>Number of years with rain: <span id="numYearsWithRain">--</span></p>
+				<p>Percentage of years with rain: <span id="percentYearsWithRain">--</span></p>
+			</div>
+			<div class="col-sm-4">
+				<h3>Stations</h3>
+				<p>Number of stations checked (by year):<br><span id="numResults">--</span></p>
+				<p>Number of stations with rain (by year):<br><span id="numStationsWithRain">--</span></p>
+			</div>
+		</div>
+			<div class="row">
+				<div class="col-sm-12">
+					<p><pre><span id="forecast">--</span></pre></p>
+				</div>
+			</div>
+	</div>
 
 </body>
 
