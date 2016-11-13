@@ -91,8 +91,8 @@
 			$rainQuery = array(
 				"datasetid" => "GHCND",
 				"datatypeid" => "PRCP",
-				"startdate" => date("Y-m-d", mktime(0, 0, 0, date("m")  , date("d"), date("Y")-$i)),
-				"enddate" => date("Y-m-d", mktime(0, 0, 0, date("m")  , date("d"), date("Y")-$i))
+				"startdate" => date("Y-m-d", mktime(0, 0, 0, date("m"), date("d"), date("Y")-$i)),
+				"enddate" => date("Y-m-d", mktime(0, 0, 0, date("m"), date("d"), date("Y")-$i))
 			);
 			$result[$i-1] = api("data", http_build_query($rainQuery).$stationList);
 		}
@@ -207,13 +207,29 @@
 			xhr.onreadystatechange = function() {
 				if(xhr.readyState == XMLHttpRequest.DONE && xhr.status == 200) {
 					forecast = JSON.parse(xhr.responseText);
-					document.getElementById("chanceOfRain").innerHTML = forecast.chanceOfRain;
+
+					document.getElementById("chanceOfRain").innerHTML = forecast.chanceOfRain + "%";
+					document.getElementById("chanceOfRainBar").style.width = forecast.chanceOfRain + "%";
+					document.getElementById("chanceOfRainBarNegative").style.width = (100 - forecast.chanceOfRain) + "%";
+					if(forecast.chanceOfRain == 0) {
+						document.getElementById("chanceOfRain").className = "text-danger";
+					} else {
+						document.getElementById("chanceOfRain").className = "text-info";
+					}
+
 					document.getElementById("numYears").innerHTML = forecast.numYears;
 					document.getElementById("numYearsWithRain").innerHTML = forecast.numYearsWithRain;
 					document.getElementById("percentYearsWithRain").innerHTML = (forecast.numYearsWithRain / forecast.numYears) * 100;
 					document.getElementById("numResults").innerHTML = forecast.numResults;
 					document.getElementById("numStationsWithRain").innerHTML = forecast.numStationsWithRain;
 					document.getElementById("forecast").innerHTML = JSON.stringify(forecast.forecast, null, 4);
+
+					document.getElementById("forecastTable").innerHTML = "<tr><th>Date</th><th>Weather</th></tr>";
+					for(var i = 0; i < forecast.forecast.data.weather.length; i++) {
+						var row = document.getElementById("forecastTable").insertRow();
+						row.insertCell(0).innerHTML = forecast.forecast.time.startPeriodName[i];
+						row.insertCell(1).innerHTML = forecast.forecast.data.text[i];
+					}
 
 					submitButton.value = "Submit";
 					submitButton.disabled = "";
@@ -241,7 +257,11 @@
 		<div class="row">
 			<div class="col-sm-4">
 				<h3>Results</h3>
-				<p><span id="chanceOfRain">--</span>% change of rain!</p>
+				<p><span id="chanceOfRain">--%</span> change of rain!</p>
+				<div class="progress">
+					<div id="chanceOfRainBar" class="progress-bar"></div>
+					<div id="chanceOfRainBarNegative" class="progress-bar progress-bar-danger"></div>
+				</div>
 			</div>
 			<div class="col-sm-4">
 				<h3>Stats</h3>
@@ -256,6 +276,14 @@
 			</div>
 		</div>
 			<div class="row">
+				<div class="col-sm-12">
+					<h3>7-Day Forecast</h3>
+					<table id="forecastTable" class="table table-striped">
+						<tr><th>Date</th><th>Weather</th></tr>
+					</table>
+				</div>
+			</div>
+			<div class="row" style="display: none;">
 				<div class="col-sm-12">
 					<p><pre><span id="forecast">--</span></pre></p>
 				</div>
