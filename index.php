@@ -2,7 +2,7 @@
 	function api($endpoint, $query) {
 		//API access details
 		$apikey = "PUT_NOAA_API_KEY_HERE";
-		$apiURL = "http://www.ncdc.noaa.gov/cdo-web/api/v2/";
+		$apiURL = "https://www.ncdc.noaa.gov/cdo-web/api/v2/";
 
 		//Build API request
 		$apiCURL = curl_init();
