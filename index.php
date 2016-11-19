@@ -86,44 +86,57 @@
 
 		//Get rainfall data for last 4 years
 		$numYears = 4;
+		$numDays = 8;
 		$result = array();
 		for($i = 1; $i <= $numYears; $i++) {
 			$rainQuery = array(
 				"datasetid" => "GHCND",
 				"datatypeid" => "PRCP",
-				"startdate" => date("Y-m-d", mktime(0, 0, 0, date("m"), date("d"), date("Y")-$i)),
-				"enddate" => date("Y-m-d", mktime(0, 0, 0, date("m"), date("d"), date("Y")-$i))
+				"startdate" => date("Y-m-d", mktime(0, 0, 0, date("m"), date("d"), date("Y") - $i)),
+				"enddate" => date("Y-m-d", mktime(0, 0, 0, date("m"), date("d") + $numDays, date("Y") - $i)),
+				"limit" => 100
 			);
 			$result[$i-1] = api("data", http_build_query($rainQuery).$stationList);
 		}
 
 		//Calculate probability
-		$numYearsWithRain = 0;
+		$numYearsWithRain = array_fill(0, $numDays, 0);
 		$numResults = array();
 		$numStationsWithRain = array();
 		$yearNum = 0;
+		$currentDate = date_create();
 		foreach($result as $year) {
-			$numResults[$yearNum] = 0;
-			$numStationsWithRain[$yearNum] = 0;
-			foreach($year->results as $data) {
-				$numResults[$yearNum]++;
-				if($data->value > 0 && $data->value != 99999) {
-					$numStationsWithRain[$yearNum]++;
+			$numResults[$yearNum] = array_fill(0, $numDays, 0);
+			$numStationsWithRain[$yearNum] = array_fill(0, $numDays, 0);
+			$currentDate->modify("-1 year");
+
+			foreach($year->results as $station) {
+				$dayNum = date_diff($currentDate, date_create($station->date))->format("%a");
+				$numResults[$yearNum][$dayNum]++;
+				if($station->value > 0 && $station->value != 99999) {
+					$numStationsWithRain[$yearNum][$dayNum]++;
 				}
 			}
-			if($numResults[$yearNum] > 0) {
-				if($numStationsWithRain[$yearNum] > 0) {
-					$numYearsWithRain++;
+
+			for($day = 0; $day < $numDays; $day++) {
+				if(isset($numResults[$yearNum][$day]) && $numResults[$yearNum][$day] > 0) {
+					if(isset($numStationsWithRain[$yearNum][$day]) && $numStationsWithRain[$yearNum][$day] > 0) {
+						$numYearsWithRain[$day]++;
+					}
 				}
-				$yearNum++;
 			}
+
+			$yearNum++;
 		}
 
 		//Predict whether it will rain or not
-		//TODO: Check forecast for rain
-		$chanceOfRain = ($numYearsWithRain / $numYears) * 100;
-		//TODO: Display chance of rain and forecast
-		//TODO: Extend to month view? Allow user to change date / location?
+		$chanceOfRain = array();
+		for($i = 0; $i < $numDays; $i++) {
+			if(!isset($numYearsWithRain[$i])) {
+				$numYearsWithRain[$i] = 0;
+			}
+			$chanceOfRain[$i] = ($numYearsWithRain[$i] / $numYears) * 100;
+		}
 
 		$response = array(
 			"chanceOfRain" => $chanceOfRain,
@@ -131,7 +144,8 @@
 			"numYears" => $numYears,
 			"numYearsWithRain" => $numYearsWithRain,
 			"numResults" => $numResults,
-			"numStationsWithRain" => $numStationsWithRain
+			"numStationsWithRain" => $numStationsWithRain,
+			"raw" => $result
 		);
 
 		header("Content-Type: application/json");
@@ -208,10 +222,10 @@
 				if(xhr.readyState == XMLHttpRequest.DONE && xhr.status == 200) {
 					forecast = JSON.parse(xhr.responseText);
 
-					document.getElementById("chanceOfRain").innerHTML = forecast.chanceOfRain + "%";
-					document.getElementById("chanceOfRainBar").style.width = forecast.chanceOfRain + "%";
-					document.getElementById("chanceOfRainBarNegative").style.width = (100 - forecast.chanceOfRain) + "%";
-					if(forecast.chanceOfRain == 0) {
+					document.getElementById("chanceOfRain").innerHTML = forecast.chanceOfRain[0] + "%";
+					document.getElementById("chanceOfRainBar").style.width = forecast.chanceOfRain[0] + "%";
+					document.getElementById("chanceOfRainBarNegative").style.width = (100 - forecast.chanceOfRain[0]) + "%";
+					if(forecast.chanceOfRain[0] == 0) {
 						document.getElementById("chanceOfRain").className = "text-danger";
 					} else {
 						document.getElementById("chanceOfRain").className = "text-info";
@@ -219,16 +233,30 @@
 
 					document.getElementById("numYears").innerHTML = forecast.numYears;
 					document.getElementById("numYearsWithRain").innerHTML = forecast.numYearsWithRain;
-					document.getElementById("percentYearsWithRain").innerHTML = (forecast.numYearsWithRain / forecast.numYears) * 100;
+					document.getElementById("percentYearsWithRain").innerHTML = ((forecast.numYearsWithRain[0] / forecast.numYears) * 100) + "%";
 					document.getElementById("numResults").innerHTML = forecast.numResults;
 					document.getElementById("numStationsWithRain").innerHTML = forecast.numStationsWithRain;
 					document.getElementById("forecast").innerHTML = JSON.stringify(forecast.forecast, null, 4);
 
-					document.getElementById("forecastTable").innerHTML = "<tr><th>Date</th><th>Weather</th></tr>";
+					document.getElementById("forecastTable").innerHTML = "<tr><th>Date</th><th>Rain Prediction</th><th>Weather</th></tr>";
 					for(var i = 0; i < forecast.forecast.data.weather.length; i++) {
 						var row = document.getElementById("forecastTable").insertRow();
 						row.insertCell(0).innerHTML = forecast.forecast.time.startPeriodName[i];
-						row.insertCell(1).innerHTML = forecast.forecast.data.text[i];
+
+						var rainCell = row.insertCell(1);
+						var chanceIndex = Math.floor(i / 2);
+						if(forecast.forecast.time.startPeriodName[0] == "Tonight") {
+							chanceIndex = Math.floor((i + 1) / 2);
+						}
+
+						rainCell.innerHTML = forecast.chanceOfRain[chanceIndex] + "%";
+						if(forecast.chanceOfRain[chanceIndex] == 0) {
+							rainCell.className = "text-danger";
+						} else {
+							rainCell.className = "text-info";
+						}
+
+						row.insertCell(2).innerHTML = forecast.forecast.data.text[i];
 					}
 
 					submitButton.value = "Submit";
@@ -267,7 +295,7 @@
 				<h3>Stats</h3>
 				<p>Number of years checked: <span id="numYears">--</span></p>
 				<p>Number of years with rain: <span id="numYearsWithRain">--</span></p>
-				<p>Percentage of years with rain: <span id="percentYearsWithRain">--</span></p>
+				<p>Percentage of years with rain (current day): <span id="percentYearsWithRain">--%</span></p>
 			</div>
 			<div class="col-sm-4">
 				<h3>Stations</h3>
@@ -279,7 +307,7 @@
 				<div class="col-sm-12">
 					<h3>7-Day Forecast</h3>
 					<table id="forecastTable" class="table table-striped">
-						<tr><th>Date</th><th>Weather</th></tr>
+						<tr><th>Date</th><th>Rain Prediction</th><th>NOAA Weather</th></tr>
 					</table>
 				</div>
 			</div>
