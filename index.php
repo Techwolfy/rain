@@ -232,13 +232,13 @@
 					}
 
 					document.getElementById("numYears").innerHTML = forecast.numYears;
-					document.getElementById("numYearsWithRain").innerHTML = forecast.numYearsWithRain;
+					document.getElementById("numYearsWithRain").innerHTML = forecast.numYearsWithRain[0];
 					document.getElementById("percentYearsWithRain").innerHTML = ((forecast.numYearsWithRain[0] / forecast.numYears) * 100) + "%";
-					document.getElementById("numResults").innerHTML = forecast.numResults;
-					document.getElementById("numStationsWithRain").innerHTML = forecast.numStationsWithRain;
+					document.getElementById("numResults").innerHTML = forecast.numResults.reduce(function(a,b){return a.concat(b);}).reduce(function(a,b){return a+b;});	//Multidimentional array sum
+					document.getElementById("numStationsWithRain").innerHTML = forecast.numStationsWithRain.reduce(function(a,b){return a.concat(b);}).reduce(function(a,b){return a+b;});	//Multidimentional array sum
 					document.getElementById("forecast").innerHTML = JSON.stringify(forecast.forecast, null, 4);
 
-					document.getElementById("forecastTable").innerHTML = "<tr><th>Date</th><th>Rain Prediction</th><th>Weather</th></tr>";
+					document.getElementById("forecastTable").innerHTML = "<tr><th>Date</th><th>Rain Prediction</th><th>NOAA Weather</th></tr>";
 					for(var i = 0; i < forecast.forecast.data.weather.length; i++) {
 						var row = document.getElementById("forecastTable").insertRow();
 						row.insertCell(0).innerHTML = forecast.forecast.time.startPeriodName[i];
@@ -294,13 +294,13 @@
 			<div class="col-sm-4">
 				<h3>Stats</h3>
 				<p>Number of years checked: <span id="numYears">--</span></p>
-				<p>Number of years with rain: <span id="numYearsWithRain">--</span></p>
+				<p>Number of years with rain (current day): <span id="numYearsWithRain">--</span></p>
 				<p>Percentage of years with rain (current day): <span id="percentYearsWithRain">--%</span></p>
 			</div>
 			<div class="col-sm-4">
 				<h3>Stations</h3>
-				<p>Number of stations checked (by year):<br><span id="numResults">--</span></p>
-				<p>Number of stations with rain (by year):<br><span id="numStationsWithRain">--</span></p>
+				<p>Total number of station data points checked: <span id="numResults">--</span></p>
+				<p>Total number of station data points with rain: <span id="numStationsWithRain">--</span></p>
 			</div>
 		</div>
 			<div class="row">
