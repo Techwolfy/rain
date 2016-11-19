@@ -1,0 +1,28 @@
+@font-face {
+	font-family: "Roboto";
+	src: url("roboto.woff") format("woff");
+}
+
+@font-face {
+	font-family: "Glyphicons Halflings";
+	src: url("glyphicons-halflings.woff") format("woff");
+}
+
+body {
+	font-family: "Roboto", "Arial", sans-serif !important;
+}
+
+.animate-spin {
+	-animation: spin 2s infinite linear;
+	-webkit-animation: spinWebkit 2s infinite linear;
+}
+
+@keyframes spin {
+	from {transform: scale(1) rotate(0deg);}
+	to {transform: scale(1) rotate(360deg);}
+}
+
+@-webkit-keyframes spinWebkit {
+	from {-webkit-transform: rotate(0deg);}
+	to {-webkit-transform: rotate(360deg);}
+}
