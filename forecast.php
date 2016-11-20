@@ -5,6 +5,7 @@
 		header("Location: .");
 	}
 
+	//https://www.ncdc.noaa.gov/cdo-web/webservices/v2#data
 	function api($endpoint, $query) {
 		//API access details
 		$apikey = "PUT_NOAA_API_KEY_HERE";
