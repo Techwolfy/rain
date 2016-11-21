@@ -83,7 +83,7 @@ function submit() {
 
 				var rainCell = row.insertCell(1);
 				var chanceIndex = Math.floor(i / 2);
-				if(forecast.forecast.time.startPeriodName[0] == "Tonight") {
+				if(forecast.forecast.time.startPeriodName[1] != "Tonight") {
 					chanceIndex = Math.floor((i + 1) / 2);
 				}
 
