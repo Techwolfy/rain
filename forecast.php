@@ -47,6 +47,8 @@
 	}
 
 	if(isset($_REQUEST["forecast"])) {
+		$error = false;
+
 		//Get user's latitude and longitude
 		//$latlon = getLatLon($zip);
 		$latlon = array("latitude" => $_REQUEST["latitude"], "longitude" => $_REQUEST["longitude"]);
@@ -54,6 +56,9 @@
 
 		//Get current forecast station
 		$forecast = getForecast($latlon["latitude"], $latlon["longitude"]);
+		if($forecast == null) {
+			$error = true;
+		}
 
 		//Get station IDs
 		$stationQuery = array(
@@ -86,56 +91,63 @@
 				"limit" => 100
 			);
 			$result[$i-1] = api("data", http_build_query($rainQuery).$stationList);
+			if($result[$i-1] == null) {
+				$error = true;
+				break;
+			}
 		}
 
 		//Calculate probability
-		$numYearsWithRain = array_fill(0, $numDays, 0);
-		$numResults = array();
-		$numStationsWithRain = array();
-		$yearNum = 0;
-		$currentDate = date_create();
-		foreach($result as $year) {
-			$numResults[$yearNum] = array_fill(0, $numDays, 0);
-			$numStationsWithRain[$yearNum] = array_fill(0, $numDays, 0);
-			$currentDate->modify("-1 year");
+		if(!$error) {
+			$numYearsWithRain = array_fill(0, $numDays, 0);
+			$numResults = array();
+			$numStationsWithRain = array();
+			$yearNum = 0;
+			$currentDate = date_create();
+			foreach($result as $year) {
+				$numResults[$yearNum] = array_fill(0, $numDays, 0);
+				$numStationsWithRain[$yearNum] = array_fill(0, $numDays, 0);
+				$currentDate->modify("-1 year");
 
-			foreach($year->results as $station) {
-				$dayNum = date_diff($currentDate, date_create($station->date))->format("%a");
-				$numResults[$yearNum][$dayNum]++;
-				if($station->value > 0 && $station->value != 99999) {
-					$numStationsWithRain[$yearNum][$dayNum]++;
-				}
-			}
-
-			for($day = 0; $day < $numDays; $day++) {
-				if(isset($numResults[$yearNum][$day]) && $numResults[$yearNum][$day] > 0) {
-					if(isset($numStationsWithRain[$yearNum][$day]) && $numStationsWithRain[$yearNum][$day] > 0) {
-						$numYearsWithRain[$day]++;
+					foreach($year->results as $station) {
+						$dayNum = date_diff($currentDate, date_create($station->date))->format("%a");
+						$numResults[$yearNum][$dayNum]++;
+						if($station->value > 0 && $station->value != 99999) {
+							$numStationsWithRain[$yearNum][$dayNum]++;
+						}
 					}
+
+					for($day = 0; $day < $numDays; $day++) {
+						if(isset($numResults[$yearNum][$day]) && $numResults[$yearNum][$day] > 0) {
+							if(isset($numStationsWithRain[$yearNum][$day]) && $numStationsWithRain[$yearNum][$day] > 0) {
+								$numYearsWithRain[$day]++;
+							}
+						}
+					}
+
+					$yearNum++;
+			}
+
+			//Predict whether it will rain or not
+			$chanceOfRain = array();
+			for($i = 0; $i < $numDays; $i++) {
+				if(!isset($numYearsWithRain[$i])) {
+					$numYearsWithRain[$i] = 0;
 				}
+				$chanceOfRain[$i] = ($numYearsWithRain[$i] / $numYears) * 100;
 			}
-
-			$yearNum++;
 		}
 
-		//Predict whether it will rain or not
-		$chanceOfRain = array();
-		for($i = 0; $i < $numDays; $i++) {
-			if(!isset($numYearsWithRain[$i])) {
-				$numYearsWithRain[$i] = 0;
-			}
-			$chanceOfRain[$i] = ($numYearsWithRain[$i] / $numYears) * 100;
+		$response = array("error" => $error);
+		if(!$error) {
+			$response["chanceOfRain"] = $chanceOfRain;
+			$response["forecast"] = $forecast;
+			$response["numYears"] = $numYears;
+			$response["numYearsWithRain"] = $numYearsWithRain;
+			$response["numResults"] = $numResults;
+			$response["numStationsWithRain"] = $numStationsWithRain;
+			$response["raw"] = $result;
 		}
-
-		$response = array(
-			"chanceOfRain" => $chanceOfRain,
-			"forecast" => $forecast,
-			"numYears" => $numYears,
-			"numYearsWithRain" => $numYearsWithRain,
-			"numResults" => $numResults,
-			"numStationsWithRain" => $numStationsWithRain,
-			"raw" => $result
-		);
 
 		header("Content-Type: application/json");
 		echo json_encode($response);

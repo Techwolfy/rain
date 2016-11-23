@@ -47,11 +47,14 @@ function showPosition(position) {
 
 	locationButton.innerHTML = "Get Location";
 	locationButton.disabled = "";
+	submitButton.innerHTML = "Submit";
+	submitButton.className = "btn btn-success";
 	submitButton.disabled = "";
 }
 
 function submit() {
 	submitButton.innerHTML = "<span class=\"glyphicon glyphicon-cog animate-spin\"></span> Loading...";
+	submitButton.className = "btn btn-success";
 	submitButton.disabled = "disabled";
 
 	var url = "?forecast&latitude=" + latitude + "&longitude=" + longitude;
@@ -59,6 +62,13 @@ function submit() {
 	xhr.onreadystatechange = function() {
 		if(xhr.readyState == XMLHttpRequest.DONE && xhr.status == 200) {
 			forecast = JSON.parse(xhr.responseText);
+
+			if(forecast.error == true) {
+				submitButton.innerHTML = "An error has ocurred. Please try again later.";
+				submitButton.className = "btn btn-danger";
+				submitButton.disabled = "disabled";
+				return;
+			}
 
 			document.getElementById("chanceOfRain").innerHTML = forecast.chanceOfRain[0] + "%";
 			document.getElementById("chanceOfRainBar").style.width = forecast.chanceOfRain[0] + "%";
